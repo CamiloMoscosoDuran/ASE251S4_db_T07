@@ -1,0 +1,17 @@
+{
+  "database": "AgroTecnoDB",
+  "collection": "customers",
+  "identifierMigration": {
+    "fromPrefix": "CLI",
+    "toPrefix": "CUS",
+    "validatorPattern": "^CUS[0-9]{3,}$"
+  },
+  "references": [
+    {
+      "collection": "field_meetings",
+      "field": "customer_id"
+    }
+  ],
+  "validationLevel": "strict",
+  "validationAction": "error"
+}

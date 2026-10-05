@@ -1,0 +1,18 @@
+services:
+  sql-init:
+    build:
+      context: ./db/sqlserver
+      dockerfile: Dockerfile
+
+  mongo-init:
+    build:
+      context: ./db/mongodb
+      dockerfile: Dockerfile
+
+  checker:
+    build:
+      context: ./check
+      dockerfile: Dockerfile
+      args:
+        RELEASE_VERSION: ${RELEASE_VERSION:-development}
+        GIT_SHA: ${GIT_SHA:-local}

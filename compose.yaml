@@ -1,0 +1,100 @@
+﻿services:
+  sqlserver:
+    image: "${SQLSERVER_IMAGE:-mcr.microsoft.com/mssql/server:2022-latest}"
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: "${MSSQL_PID:-Developer}"
+      MSSQL_SA_PASSWORD: "${SQL_ADMIN_PASSWORD:-SqlServer12345!}"
+    ports:
+      - "${SQL_HOST_PORT:-1433}:1433"
+    volumes:
+      - sql-data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -Q 'SELECT 1' > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  mongodb:
+    image: "${MONGO_IMAGE:-mongo:8.0.32-noble}"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: "${MONGO_ADMIN_USER:-admin}"
+      MONGO_INITDB_ROOT_PASSWORD: "${MONGO_ADMIN_PASSWORD:-Mongo12345!}"
+    ports:
+      - "${MONGO_HOST_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --host
+        - mongodb
+        - --quiet
+        - --eval
+        - 'const a=db.getSiblingDB("admin"); a.auth(process.env.MONGO_INITDB_ROOT_USERNAME,process.env.MONGO_INITDB_ROOT_PASSWORD); if(a.runCommand({ping:1}).ok!==1) quit(1);'
+      interval: 10s
+      timeout: 8s
+      retries: 20
+      start_period: 20s
+
+  sql-init:
+    image: "${IMAGE_NAMESPACE:-camilomoscoso}/ase251s4-db-sqlserver-init:${LAB_VERSION:-latest}"
+    environment:
+      SQL_HOST: sqlserver
+      SQL_USER: sa
+      SQL_PASSWORD: "${SQL_ADMIN_PASSWORD:-SqlServer12345!}"
+      TARGET_SCHEMA_VERSION: "${TARGET_SCHEMA_VERSION:-latest}"
+      GIT_SHA: "${GIT_SHA:-local}"
+      RELEASE_VERSION: "${RELEASE_VERSION:-local}"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    restart: "no"
+
+  mongo-init:
+    image: "${IMAGE_NAMESPACE:-camilomoscoso}/ase251s4-db-mongodb-init:${LAB_VERSION:-latest}"
+    environment:
+      MONGO_HOST: mongodb
+      MONGO_ADMIN_USER: "${MONGO_ADMIN_USER:-admin}"
+      MONGO_ADMIN_PASSWORD: "${MONGO_ADMIN_PASSWORD:-Mongo12345!}"
+      MONGO_DATABASE: AgroTecnoDB
+      TARGET_SCHEMA_VERSION: "${TARGET_SCHEMA_VERSION:-latest}"
+      GIT_SHA: "${GIT_SHA:-local}"
+      RELEASE_VERSION: "${RELEASE_VERSION:-local}"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: "no"
+
+  checker:
+    image: "${IMAGE_NAMESPACE:-camilomoscoso}/ase251s4-db-checker:${LAB_VERSION:-latest}"
+    environment:
+      PORT: "8080"
+      SQL_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=agroTecno_db;encrypt=true;trustServerCertificate=true;loginTimeout=3"
+      SQL_USER: sa
+      SQL_PASSWORD: "${SQL_ADMIN_PASSWORD:-SqlServer12345!}"
+      SQL_SEED_USERNAME: admin_agro
+      MONGO_HOST: mongodb
+      MONGO_DATABASE: AgroTecnoDB
+      MONGO_USER: "${MONGO_ADMIN_USER:-admin}"
+      MONGO_PASSWORD: "${MONGO_ADMIN_PASSWORD:-Mongo12345!}"
+      MONGO_AUTH_SOURCE: admin
+      MONGO_SEED_CUSTOMER_ID: CUS001
+      TARGET_SCHEMA_VERSION: "${TARGET_SCHEMA_VERSION:-latest}"
+      IMAGE_REFERENCE: "${IMAGE_NAMESPACE:-camilomoscoso}/ase251s4-db-checker:${LAB_VERSION:-latest}"
+      RELEASE_VERSION: "${RELEASE_VERSION:-local}"
+      GIT_SHA: "${GIT_SHA:-local}"
+    ports:
+      - "${CHECK_HOST_PORT:-8080}:8080"
+    depends_on:
+      sql-init:
+        condition: service_completed_successfully
+      mongo-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  sql-data:
+  mongo-data:
