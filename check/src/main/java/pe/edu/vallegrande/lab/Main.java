@@ -227,7 +227,7 @@ public final class Main {
              "SELECT TOP (1) order_id, mongo_customer_id, total_order, order_status, "
                  + "CONVERT(varchar(33), entry_date, 126) "
                  + "FROM ventas.sales_order WHERE mongo_customer_id = ? ORDER BY order_id")) {
-      statement.setString(1, optionalEnv("MONGO_SEED_CUSTOMER_ID", "CUS001"));
+      statement.setString(1, optionalEnv("SQL_SEED_CUSTOMER_ID", "CUS001"));
       statement.setQueryTimeout(3);
       try (var result = statement.executeQuery()) {
         if (!result.next()) return null;
