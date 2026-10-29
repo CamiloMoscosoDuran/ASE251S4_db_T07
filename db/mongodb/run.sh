@@ -9,7 +9,8 @@ MONGO_DATABASE="${MONGO_DATABASE:-AgroTecnoDB}"
 TARGET_SCHEMA_VERSION="${TARGET_SCHEMA_VERSION:-latest}"
 GIT_SHA="${GIT_SHA:-local}"
 RELEASE_VERSION="${RELEASE_VERSION:-local}"
-export MONGO_ADMIN_USER MONGO_ADMIN_PASSWORD MONGO_DATABASE TARGET_SCHEMA_VERSION GIT_SHA RELEASE_VERSION
+OPERATING_TIME_ZONE="${OPERATING_TIME_ZONE:-America/Lima}"
+export MONGO_ADMIN_USER MONGO_ADMIN_PASSWORD MONGO_DATABASE TARGET_SCHEMA_VERSION GIT_SHA RELEASE_VERSION OPERATING_TIME_ZONE
 
 mongosh_auth() {
   mongosh \
@@ -170,15 +171,24 @@ apply_script() {
 
   echo "MongoDB: aplicando ${name%.*}"
   case "$script" in
-    *.js) mongosh_auth "$script" ;;
     *.json) apply_json_migration "$script" ;;
+    *.js)
+      first_nonblank="$(sed -n '/[^[:space:]]/{s/^[[:space:]]*//;p;q;}' "$script")"
+      case "$first_nonblank" in
+        \{*) apply_json_migration "$script" ;;
+        *) mongosh_auth "$script" ;;
+      esac
+      ;;
   esac
   record_change "$script" "$sequence" "$checksum"
 }
 
+migration_scripts() {
+  find changes -maxdepth 1 -type f \( -name 'V*.js' -o -name 'V*.json' \) -print | sort
+}
+
 latest_version=1
-for candidate in changes/V*.js changes/V*.json; do
-  [ -e "$candidate" ] || continue
+for candidate in $(migration_scripts); do
   sequence="$(script_sequence "$candidate")"
   if [ "$sequence" -gt "$latest_version" ]; then
     latest_version="$sequence"
@@ -195,8 +205,7 @@ case "$TARGET_SCHEMA_VERSION" in ''|*[!0-9]*|0) echo 'TARGET_SCHEMA_VERSION debe
 }
 
 expected=2
-for candidate in changes/V*.js changes/V*.json; do
-  [ -e "$candidate" ] || continue
+for candidate in $(migration_scripts); do
   sequence="$(script_sequence "$candidate")"
   [ "$sequence" -eq "$expected" ] || {
     echo "Se esperaba V$(printf '%03d' "$expected") y apareció $candidate" >&2
@@ -222,9 +231,10 @@ reconcile() {
     exit 4
   fi
 
+  mongo_eval 'labDb.schema_changes.updateMany({$or:[{appliedAtTimeZone:{$exists:false}},{appliedAtTimeZone:null}]},{$set:{appliedAtTimeZone:process.env.OPERATING_TIME_ZONE}});'
+
   expected=2
-  for script in changes/V*.js changes/V*.json; do
-    [ -e "$script" ] || continue
+  for script in $(migration_scripts); do
     sequence="$(script_sequence "$script")"
     [ "$sequence" -le "$TARGET_SCHEMA_VERSION" ] || continue
     [ "$sequence" -eq "$expected" ] || {

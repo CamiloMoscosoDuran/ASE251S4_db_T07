@@ -9,6 +9,7 @@ SQL_PASSWORD="${SQL_PASSWORD:?Falta SQL_PASSWORD}"
 TARGET_SCHEMA_VERSION="${TARGET_SCHEMA_VERSION:-latest}"
 GIT_SHA="${GIT_SHA:-local}"
 RELEASE_VERSION="${RELEASE_VERSION:-local}"
+OPERATING_TIME_ZONE="${OPERATING_TIME_ZONE:-America/Lima}"
 SQLCMD="/opt/mssql-tools18/bin/sqlcmd"
 
 run_sqlcmd() {
@@ -73,6 +74,7 @@ record_change() {
   checksum="$3"
   git_sha_sql="$(sql_literal "$GIT_SHA")"
   release_sql="$(sql_literal "$RELEASE_VERSION")"
+  timezone_sql="$(sql_literal "$OPERATING_TIME_ZONE")"
   change_id_sql="$(sql_literal "$change_id")"
   run_sqlcmd -d "$SQL_DATABASE" \
     -v "change_sequence=$sequence" \
@@ -80,8 +82,16 @@ record_change() {
     -v "change_checksum=$checksum" \
     -v "git_sha=$git_sha_sql" \
     -v "release_version=$release_sql" \
+    -v "operating_timezone=$timezone_sql" \
     -i metadata/record-change.sql
 }
+
+  ensure_operating_timezone() {
+    timezone_sql="$(sql_literal "$OPERATING_TIME_ZONE")"
+    run_sqlcmd -d "$SQL_DATABASE" \
+    -v "operating_timezone=$timezone_sql" \
+    -i metadata/ensure-timezone.sql
+  }
 
 verify_contract() {
   run_sqlcmd -d "$SQL_DATABASE" \
@@ -178,6 +188,8 @@ case "$action" in
       echo 'SQL Server: base parcial sin historial; se requiere revisión manual' >&2
       exit 4
     fi
+
+    ensure_operating_timezone
 
     expected=2
     for script in changes/V*.sql; do

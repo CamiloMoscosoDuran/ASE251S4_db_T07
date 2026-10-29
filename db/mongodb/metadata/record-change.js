@@ -15,5 +15,6 @@ labDb.schema_changes.insertOne({
   checksum: process.env.CHANGE_CHECKSUM,
   gitSha: process.env.GIT_SHA,
   releaseVersion: process.env.RELEASE_VERSION,
+  appliedAtTimeZone: process.env.OPERATING_TIME_ZONE,
   appliedAt: new Date()
 });

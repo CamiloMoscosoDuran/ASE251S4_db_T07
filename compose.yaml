@@ -40,7 +40,7 @@
       start_period: 20s
 
   sql-init:
-    image: "${IMAGE_NAMESPACE:-camilomoscoso}/ase251s4-db-sqlserver-init:${LAB_VERSION:-latest}"
+    image: "${IMAGE_NAMESPACE:?Define IMAGE_NAMESPACE en .env}/ase251s4-db-sqlserver-init:${LAB_VERSION:-latest}"
     environment:
       SQL_HOST: sqlserver
       SQL_USER: sa
@@ -48,13 +48,14 @@
       TARGET_SCHEMA_VERSION: "${TARGET_SCHEMA_VERSION:-latest}"
       GIT_SHA: "${GIT_SHA:-local}"
       RELEASE_VERSION: "${RELEASE_VERSION:-local}"
+      OPERATING_TIME_ZONE: "${OPERATING_TIME_ZONE:-America/Lima}"
     depends_on:
       sqlserver:
         condition: service_healthy
     restart: "no"
 
   mongo-init:
-    image: "${IMAGE_NAMESPACE:-camilomoscoso}/ase251s4-db-mongodb-init:${LAB_VERSION:-latest}"
+    image: "${IMAGE_NAMESPACE:?Define IMAGE_NAMESPACE en .env}/ase251s4-db-mongodb-init:${LAB_VERSION:-latest}"
     environment:
       MONGO_HOST: mongodb
       MONGO_ADMIN_USER: "${MONGO_ADMIN_USER:-admin}"
@@ -63,13 +64,14 @@
       TARGET_SCHEMA_VERSION: "${TARGET_SCHEMA_VERSION:-latest}"
       GIT_SHA: "${GIT_SHA:-local}"
       RELEASE_VERSION: "${RELEASE_VERSION:-local}"
+      OPERATING_TIME_ZONE: "${OPERATING_TIME_ZONE:-America/Lima}"
     depends_on:
       mongodb:
         condition: service_healthy
     restart: "no"
 
   checker:
-    image: "${IMAGE_NAMESPACE:-camilomoscoso}/ase251s4-db-checker:${LAB_VERSION:-latest}"
+    image: "${IMAGE_NAMESPACE:?Define IMAGE_NAMESPACE en .env}/ase251s4-db-checker:${LAB_VERSION:-latest}"
     environment:
       PORT: "8080"
       SQL_URL: "jdbc:sqlserver://sqlserver:1433;databaseName=agroTecno_db;encrypt=true;trustServerCertificate=true;loginTimeout=3"
@@ -84,9 +86,10 @@
       MONGO_AUTH_SOURCE: admin
       MONGO_SEED_CUSTOMER_ID: "${MONGO_SEED_CUSTOMER_ID:-CUS001}"
       TARGET_SCHEMA_VERSION: "${TARGET_SCHEMA_VERSION:-latest}"
-      IMAGE_REFERENCE: "${IMAGE_NAMESPACE:-camilomoscoso}/ase251s4-db-checker:${LAB_VERSION:-latest}"
+      IMAGE_REFERENCE: "${IMAGE_NAMESPACE:?Define IMAGE_NAMESPACE en .env}/ase251s4-db-checker:${LAB_VERSION:-latest}"
       RELEASE_VERSION: "${RELEASE_VERSION:-local}"
       GIT_SHA: "${GIT_SHA:-local}"
+      OPERATING_TIME_ZONE: "${OPERATING_TIME_ZONE:-America/Lima}"
     ports:
       - "${CHECK_HOST_PORT:-8080}:8080"
     depends_on:

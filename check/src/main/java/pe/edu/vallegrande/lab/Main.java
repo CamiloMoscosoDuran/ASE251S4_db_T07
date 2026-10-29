@@ -5,6 +5,7 @@ import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoDatabase;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -13,7 +14,11 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.time.LocalDateTime;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,7 +32,8 @@ public final class Main {
   private static final String MONGO_DATABASE = "AgroTecnoDB";
   private static final String SQL_DATABASE = "agroTecno_db";
 
-  record VersionInfo(int contract, String change, String checksum, String release, String gitSha, String appliedAt) {}
+  record VersionInfo(int contract, String change, String checksum, String release, String gitSha,
+                     String appliedAt, String appliedAtTimeZone) {}
   record Probe(boolean up, long latencyMs, String target, String validation, String error) {}
 
   private static String env(String name) {
@@ -39,6 +45,10 @@ public final class Main {
   private static String optionalEnv(String name, String fallback) {
     var value = System.getenv(name);
     return value == null || value.isBlank() ? fallback : value;
+  }
+
+  private static String formatAppliedAt(Instant instant, String timeZone) {
+    return DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(instant.atZone(ZoneId.of(timeZone)));
   }
 
   private static MongoClient mongoClient() {
@@ -56,6 +66,11 @@ public final class Main {
 
   private static long elapsed(long started) {
     return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+  }
+
+  private static String mongoCustomerCollectionName(MongoDatabase database) {
+    return database.listCollections().filter(new Document("name", "customer")).first() == null
+        ? "customers" : "customer";
   }
 
   private static String safeError(Exception error) {
@@ -84,7 +99,9 @@ public final class Main {
   private static Probe mongoProbe() {
     long started = System.nanoTime();
     try (var client = mongoClient()) {
-      var found = client.getDatabase(MONGO_DATABASE).getCollection("customers")
+      var database = client.getDatabase(MONGO_DATABASE);
+      var collectionName = mongoCustomerCollectionName(database);
+      var found = database.getCollection(collectionName)
           .find(new Document("_id", optionalEnv("MONGO_SEED_CUSTOMER_ID", "CUS001")))
           .limit(1).first();
       if (found == null) throw new IllegalStateException("La semilla MongoDB no es visible");
@@ -100,13 +117,15 @@ public final class Main {
     try (var connection = DriverManager.getConnection(env("SQL_URL"), env("SQL_USER"), env("SQL_PASSWORD"));
          var statement = connection.prepareStatement(
              "SELECT TOP (1) [sequence], change_id, checksum, release_version, git_sha, "
-                 + "CONVERT(varchar(33), applied_at, 126) "
+               + "CONVERT(varchar(33), applied_at, 126), applied_timezone "
                  + "FROM dbo.schema_changes ORDER BY [sequence] DESC")) {
       statement.setQueryTimeout(3);
       try (var result = statement.executeQuery()) {
         if (!result.next()) throw new IllegalStateException("SQL Server sin historial");
+        var appliedAt = LocalDateTime.parse(result.getString(6)).toInstant(ZoneOffset.UTC);
+        var timeZone = result.getString(7);
         return new VersionInfo(result.getInt(1), result.getString(2), result.getString(3),
-            result.getString(4), result.getString(5), result.getString(6));
+          result.getString(4), result.getString(5), formatAppliedAt(appliedAt, timeZone), timeZone);
       }
     }
   }
@@ -117,9 +136,14 @@ public final class Main {
           .find().sort(new Document("sequence", -1)).limit(1).first();
       if (document == null) throw new IllegalStateException("MongoDB sin historial");
       var appliedAt = document.getDate("appliedAt");
+        var timeZone = document.getString("appliedAtTimeZone");
+        if (timeZone == null || timeZone.isBlank()) {
+          timeZone = optionalEnv("OPERATING_TIME_ZONE", "America/Lima");
+        }
       return new VersionInfo(document.getInteger("sequence"), document.getString("changeId"),
           document.getString("checksum"), document.getString("releaseVersion"),
-          document.getString("gitSha"), appliedAt == null ? null : appliedAt.toInstant().toString());
+          document.getString("gitSha"), appliedAt == null ? null : formatAppliedAt(appliedAt.toInstant(), timeZone),
+          timeZone);
     }
   }
 
@@ -134,7 +158,8 @@ public final class Main {
   private static Map<String, Object> versionInfo(VersionInfo version) {
     return map("contract", version.contract(), "lastChange", version.change(),
         "checksum", version.checksum(), "release", version.release(),
-        "gitSha", version.gitSha(), "appliedAt", version.appliedAt());
+      "gitSha", version.gitSha(), "appliedAt", version.appliedAt(),
+      "appliedAtTimeZone", version.appliedAtTimeZone());
   }
 
   private static Map<String, Object> versionJson() throws Exception {
@@ -186,9 +211,9 @@ public final class Main {
   private static Map<String, Object> mongoContract() throws Exception {
     try (var client = mongoClient()) {
       var database = client.getDatabase(MONGO_DATABASE);
-      var collectionName = "customers";
+      var collectionName = mongoCustomerCollectionName(database);
       var info = database.listCollections().filter(new Document("name", collectionName)).first();
-      if (info == null) throw new IllegalStateException("Colección customers no encontrada");
+      if (info == null) throw new IllegalStateException("Colección " + collectionName + " no encontrada");
       var options = info.get("options", Document.class);
       var validator = options == null ? null : options.get("validator", Document.class);
       var jsonSchema = validator == null ? null : validator.get("$jsonSchema", Document.class);
@@ -215,7 +240,10 @@ public final class Main {
 
   private static Object mongoSample(String collection, String idField, String id) throws Exception {
     try (var client = mongoClient()) {
-      var document = client.getDatabase(MONGO_DATABASE).getCollection(collection)
+      var database = client.getDatabase(MONGO_DATABASE);
+      var collectionName = collection.equals("customers")
+          ? mongoCustomerCollectionName(database) : collection;
+      var document = database.getCollection(collectionName)
           .find(new Document(idField, id)).first();
       return document == null ? null : JSON.readValue(document.toJson(), Object.class);
     }

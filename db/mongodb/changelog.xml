@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="
+          http://www.liquibase.org/xml/ns/dbchangelog
+          http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.33.xsd">
+
+    <!-- =================================================================== -->
+    <!-- 1️⃣ Change-sets existentes en el proyecto (Baseline & Evolución)    -->
+    <!-- =================================================================== -->
+    <include file="bootstrap/V001__baseline.js" relativeToChangelogFile="true"/>
+    <include file="changes/V002_id_atribute.json" relativeToChangelogFile="true"/>
+    <include file="changes/V003_fix_collections_name.js" relativeToChangelogFile="true"/>
+    <include file="changes/V004_add_data.js" relativeToChangelogFile="true"/>
+
+    <!-- =================================================================== -->
+    <!-- 2️⃣ Nuevos change-sets implementados por el Participante 2           -->
+    <!-- =================================================================== -->
+    <include file="changes/V005_add_order_sales_id_index.js" relativeToChangelogFile="true"/>
+    <include file="changes/V006_add_supply_validator_fields.js" relativeToChangelogFile="true"/>
+    <include file="changes/V007_add_formula_inventory_migration.js" relativeToChangelogFile="true"/>
+    <include file="changes/V008_add_customer_farm_plot_indexes.js" relativeToChangelogFile="true"/>
+
+    <!-- =================================================================== -->
+    <!-- 3️⃣ Script de verificación integral - Participante 3                    -->
+    <!-- checks/verify_v005_v008.js (ejecutar con mongosh, no con Liquibase)  -->
+    <!-- =================================================================== -->
+
+</databaseChangeLog>

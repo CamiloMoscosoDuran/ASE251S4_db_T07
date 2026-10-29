@@ -16,18 +16,21 @@ for (var sequence = 1; sequence <= requested; sequence++) {
   }
 }
 
-var customerInfo = labDb.getCollectionInfos({name: 'customers'})[0];
+var customerCollectionName = requested >= 3 ? 'customer' : 'customers';
 var expectedPrefix = requested >= 2 ? 'CUS' : 'CLI';
 var expectedId = requested >= 2 ? 'CUS001' : 'CLI0001';
 var expectedPattern = '^' + expectedPrefix + '[0-9]{3,}$';
+var customerInfo = labDb.getCollectionInfos({name: customerCollectionName})[0];
 if (!customerInfo || customerInfo.options.validator.$jsonSchema.properties._id.pattern !== expectedPattern) {
-  throw Error('Validador de customers incompatible');
+  throw Error('Validador de ' + customerCollectionName + ' incompatible');
 }
-var customerIndexes = labDb.customers.getIndexes();
-if (!customerIndexes.some(index => index.name === 'uq_customers_document_number' && index.unique === true)) {
+var customerCollection = labDb.getCollection(customerCollectionName);
+var expectedIndex = requested >= 3 ? 'uq_customer_document_number' : 'uq_customers_document_number';
+var customerIndexes = customerCollection.getIndexes();
+if (!customerIndexes.some(index => index.name === expectedIndex && index.unique === true)) {
   throw Error('Índice único de documento incompatible');
 }
-if (labDb.customers.countDocuments({_id: expectedId}) !== 1) {
+if (customerCollection.countDocuments({_id: expectedId}) !== 1) {
   throw Error('Semilla ' + expectedId + ' incorrecta');
 }
 
